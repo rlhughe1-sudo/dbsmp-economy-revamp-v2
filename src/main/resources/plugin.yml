@@ -1,37 +1,41 @@
+
 name: DBSMPEconomy
 main: com.ryden.dbsmp.DBSMPEconomy
 version: 2.0.0
+
 commands:
   eco:
     description: Administer player balances
-    usage: /eco <give|take|set> <player> <amount>
+    usage: "/eco <give|take|set> <player> <amount>"
+    permission: dbsmp.admin
   bal:
     description: Check your balance
-    usage: /bal [player]
+    usage: "/bal [player]"
   pay:
     description: Pay another player
-    usage: /pay <player> <amount>
+    usage: "/pay <player> <amount>"
   shop:
     description: Open the item shop
-    usage: /shop
+    usage: "/shop"
   sell:
     description: Sell the item in your hand
-    usage: /sell
+    usage: "/sell"
   friend:
     description: Send or accept friend requests
-    usage: /friend <player|accept|list>
+    usage: "/friend <player|accept|list>"
   friends:
     description: List your friends
-    usage: /friends
+    usage: "/friends"
   trade:
     description: Trade items and money
-    usage: /trade <player|accept|item|money|confirm|cancel>
+    usage: "/trade <player|accept|item|money|confirm|cancel>"
   baltop:
     description: Show the richest DBSMP players
-    usage: /baltop [page]
+    usage: "/baltop [page]"
   stats:
     description: Show your DBSMP economy statistics
-    usage: /stats
+    usage: "/stats"
+
 permissions:
   dbsmp.admin:
     description: Allows economy administration
