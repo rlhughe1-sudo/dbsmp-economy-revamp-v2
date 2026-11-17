@@ -32,6 +32,8 @@ public class DBSMPEconomy extends JavaPlugin implements Listener {
     private final Map<UUID, Integer> itemsSold = new HashMap<UUID, Integer>();
     private final Map<UUID, Integer> kills = new HashMap<UUID, Integer>();
     private final String shopTitle = ChatColor.DARK_GREEN + "DBSMP Item Shop";
+    private final String sellTitle = ChatColor.DARK_RED + "DBSMP Sell Shop";
+    private final String inventoryTitle = ChatColor.BLUE + "DBSMP Inventory";
 
     public void onEnable() {
         dataDir = new File(getDataFolder(), "players");
@@ -147,57 +149,193 @@ public class DBSMPEconomy extends JavaPlugin implements Listener {
         save(id);
     }
 
-    private void openShop(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 54, shopTitle);
-        Material[] mats = {Material.IRON_INGOT, Material.GOLD_INGOT, Material.DIAMOND, Material.BOW,
+    private Material[] shopMaterials() {
+        return new Material[] {Material.IRON_INGOT, Material.GOLD_INGOT, Material.DIAMOND, Material.BOW,
             Material.ARROW, Material.IRON_SWORD, Material.DIAMOND_SWORD, Material.IRON_CHESTPLATE,
             Material.DIAMOND_CHESTPLATE, Material.IRON_HELMET, Material.DIAMOND_HELMET,
             Material.IRON_LEGGINGS, Material.DIAMOND_LEGGINGS, Material.IRON_BOOTS,
             Material.DIAMOND_BOOTS, Material.ENCHANTED_BOOK, Material.EXP_BOTTLE, Material.GOLDEN_APPLE,
             Material.ENDER_PEARL, Material.ARROW};
-        double[] prices = {250, 400, 1200, 800, 8, 700, 2500, 1100, 5000, 650, 2200,
+    }
+
+    private double[] shopPrices() {
+        return new double[] {250, 400, 1200, 800, 8, 700, 2500, 1100, 5000, 650, 2200,
             950, 4200, 600, 2000, 1800, 30, 600, 350, 8};
+    }
+
+    private ItemStack menuItem(Material material, String name, List<String> lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(name);
+        meta.setLore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private void openShop(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, shopTitle);
+        Material[] mats = shopMaterials();
+        double[] prices = shopPrices();
+
         for (int i = 0; i < mats.length; i++) {
-            ItemStack it = new ItemStack(mats[i]);
-            ItemMeta meta = it.getItemMeta();
-            meta.setDisplayName(ChatColor.YELLOW + mats[i].toString().replace('_', ' '));
-            meta.setLore(Arrays.asList(ChatColor.GRAY + "Price: $" + money(prices[i]), ChatColor.GREEN + "Click to buy"));
-            it.setItemMeta(meta);
-            inv.setItem(i, it);
+            inv.setItem(i, menuItem(mats[i],
+                ChatColor.YELLOW + mats[i].toString().replace('_', ' '),
+                Arrays.asList(ChatColor.GRAY + "Price: $" + money(prices[i]),
+                    ChatColor.GREEN + "Click to buy")));
         }
+
+        inv.setItem(45, menuItem(Material.EMERALD, ChatColor.GREEN + "Sell Items",
+            Arrays.asList(ChatColor.GRAY + "Open the sell shop", ChatColor.YELLOW + "Click to view")));
+        inv.setItem(49, menuItem(Material.CHEST, ChatColor.BLUE + "View Inventory",
+            Arrays.asList(ChatColor.GRAY + "See the items you are carrying", ChatColor.YELLOW + "Click to view")));
+        p.openInventory(inv);
+    }
+
+    private void openSellShop(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, sellTitle);
+        ItemStack[] contents = p.getInventory().getContents();
+
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack item = contents[slot];
+            if (item == null || item.getType() == Material.AIR) continue;
+
+            double unitPrice = priceFor(item.getType());
+            ItemStack display = item.clone();
+            ItemMeta meta = display.getItemMeta();
+            List<String> lore = new ArrayList<String>();
+            lore.add(ChatColor.GRAY + "Quantity: " + item.getAmount());
+            if (unitPrice > 0) {
+                lore.add(ChatColor.GREEN + "Sell for: $" + money(unitPrice * item.getAmount()));
+                lore.add(ChatColor.YELLOW + "Click to sell this stack");
+            } else {
+                lore.add(ChatColor.RED + "This item cannot be sold");
+            }
+            meta.setLore(lore);
+            display.setItemMeta(meta);
+            inv.setItem(slot, display);
+        }
+
+        inv.setItem(49, menuItem(Material.BARRIER, ChatColor.RED + "Close",
+            Arrays.asList(ChatColor.GRAY + "Close the sell shop")));
+        p.openInventory(inv);
+    }
+
+    private void openInventoryView(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 54, inventoryTitle);
+        ItemStack[] contents = p.getInventory().getContents();
+
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack item = contents[slot];
+            if (item != null && item.getType() != Material.AIR) {
+                inv.setItem(slot, item.clone());
+            }
+        }
+
+        ItemStack[] armor = p.getInventory().getArmorContents();
+        int[] armorSlots = {45, 46, 47, 48};
+        for (int i = 0; i < armor.length; i++) {
+            if (armor[i] != null && armor[i].getType() != Material.AIR) {
+                inv.setItem(armorSlots[i], armor[i].clone());
+            }
+        }
+
+        inv.setItem(50, menuItem(Material.CHEST, ChatColor.BLUE + "Inventory View",
+            Arrays.asList(ChatColor.GRAY + "This is a read-only view of your inventory")));
         p.openInventory(inv);
     }
 
     @EventHandler
     public void onShopClick(InventoryClickEvent e) {
-        if (e.getView() == null || !shopTitle.equals(e.getView().getTitle())) return;
-        e.setCancelled(true);
-        if (!(e.getWhoClicked() instanceof Player) || e.getRawSlot() < 0 || e.getRawSlot() >= 20) return;
-        Player p = (Player) e.getWhoClicked();
-        int slot = e.getRawSlot();
-        Material[] mats = {Material.IRON_INGOT, Material.GOLD_INGOT, Material.DIAMOND, Material.BOW,
-            Material.ARROW, Material.IRON_SWORD, Material.DIAMOND_SWORD, Material.IRON_CHESTPLATE,
-            Material.DIAMOND_CHESTPLATE, Material.IRON_HELMET, Material.DIAMOND_HELMET,
-            Material.IRON_LEGGINGS, Material.DIAMOND_LEGGINGS, Material.IRON_BOOTS,
-            Material.DIAMOND_BOOTS, Material.ENCHANTED_BOOK, Material.EXP_BOTTLE, Material.GOLDEN_APPLE,
-            Material.ENDER_PEARL, Material.ARROW};
-        double[] prices = {250, 400, 1200, 800, 8, 700, 2500, 1100, 5000, 650, 2200,
-            950, 4200, 600, 2000, 1800, 30, 600, 350, 8};
-        if (slot >= mats.length) return;
-        load(p.getUniqueId());
-        if (balances.get(p.getUniqueId()) < prices[slot]) {
-            msg(p, "You need $" + money(prices[slot]) + ".");
+        if (e.getView() == null) return;
+        String title = e.getView().getTitle();
+
+        if (shopTitle.equals(title)) {
+            e.setCancelled(true);
+            if (!(e.getWhoClicked() instanceof Player)) return;
+            Player p = (Player) e.getWhoClicked();
+            int slot = e.getRawSlot();
+            if (slot < 0 || slot >= 54) return;
+
+            if (slot == 45) {
+                openSellShop(p);
+                return;
+            }
+            if (slot == 49) {
+                openInventoryView(p);
+                return;
+            }
+
+            Material[] mats = shopMaterials();
+            double[] prices = shopPrices();
+            if (slot >= mats.length) return;
+
+            load(p.getUniqueId());
+            if (balances.get(p.getUniqueId()) < prices[slot]) {
+                msg(p, "You need $" + money(prices[slot]) + ".");
+                return;
+            }
+            ItemStack item = new ItemStack(mats[slot]);
+            if (p.getInventory().firstEmpty() == -1) {
+                msg(p, "Your inventory is full.");
+                return;
+            }
+
+            balances.put(p.getUniqueId(), balances.get(p.getUniqueId()) - prices[slot]);
+            p.getInventory().addItem(item);
+            save(p.getUniqueId());
+            msg(p, "Bought " + mats[slot].toString().replace('_', ' ') +
+                " for $" + money(prices[slot]) + ".");
             return;
         }
-        ItemStack item = new ItemStack(mats[slot]);
-        if (p.getInventory().firstEmpty() == -1) {
-            msg(p, "Your inventory is full.");
+
+        if (sellTitle.equals(title)) {
+            e.setCancelled(true);
+            if (!(e.getWhoClicked() instanceof Player)) return;
+            Player p = (Player) e.getWhoClicked();
+            int slot = e.getRawSlot();
+            if (slot < 0 || slot >= 54) return;
+            if (slot == 49) {
+                p.closeInventory();
+                return;
+            }
+            if (slot >= 36) return;
+
+            ItemStack displayed = e.getCurrentItem();
+            if (displayed == null || displayed.getType() == Material.AIR) return;
+            double unitPrice = priceFor(displayed.getType());
+            if (unitPrice <= 0) {
+                msg(p, "The shop does not buy that item.");
+                return;
+            }
+
+            ItemStack actual = p.getInventory().getItem(slot);
+            if (actual == null || actual.getType() != displayed.getType() ||
+                actual.getAmount() != displayed.getAmount()) {
+                msg(p, "Your inventory changed. Reopen /sell and try again.");
+                openSellShop(p);
+                return;
+            }
+
+            int count = actual.getAmount();
+            Material soldType = actual.getType();
+            double total = unitPrice * count;
+            p.getInventory().setItem(slot, null);
+
+            load(p.getUniqueId());
+            balances.put(p.getUniqueId(), balances.get(p.getUniqueId()) + total);
+            itemsSold.put(p.getUniqueId(), itemsSold.get(p.getUniqueId()) + count);
+            totalEarned.put(p.getUniqueId(), totalEarned.get(p.getUniqueId()) + (int) total);
+            save(p.getUniqueId());
+
+            msg(p, "Sold " + count + " " + soldType.toString().replace('_', ' ') +
+                " for $" + money(total) + ".");
+            openSellShop(p);
             return;
         }
-        balances.put(p.getUniqueId(), balances.get(p.getUniqueId()) - prices[slot]);
-        p.getInventory().addItem(item);
-        save(p.getUniqueId());
-        msg(p, "Bought " + mats[slot].toString().replace('_', ' ') + " for $" + money(prices[slot]) + ".");
+
+        if (inventoryTitle.equals(title)) {
+            e.setCancelled(true);
+        }
     }
 
     public boolean onCommand(CommandSender s, Command c, String label, String[] a) {
@@ -295,22 +433,14 @@ public class DBSMPEconomy extends JavaPlugin implements Listener {
         }
 
         if (cmd.equals("sell")) {
-            if (!(s instanceof Player)) { msg(s, "Players only."); return true; }
-            Player p = (Player) s;
-            ItemStack hand = p.getItemInHand();
-            if (hand == null || hand.getType() == Material.AIR) { msg(p, "Hold an item in your hand first."); return true; }
-            double unit = priceFor(hand.getType());
-            int count = hand.getAmount();
-            double total = unit * count;
-            if (unit <= 0) { msg(p, "The shop does not buy that item."); return true; }
-            Material soldType = hand.getType();
-            p.setItemInHand(null);
-            load(p.getUniqueId());
-            balances.put(p.getUniqueId(), balances.get(p.getUniqueId()) + total);
-            itemsSold.put(p.getUniqueId(), itemsSold.get(p.getUniqueId()) + count);
-            totalEarned.put(p.getUniqueId(), totalEarned.get(p.getUniqueId()) + (int) total);
-            save(p.getUniqueId());
-            msg(p, "Sold " + count + " " + soldType.toString().replace('_', ' ') + " for $" + money(total) + ".");
+            if (s instanceof Player) openSellShop((Player) s);
+            else msg(s, "Players only.");
+            return true;
+        }
+
+        if (cmd.equals("inv") || cmd.equals("inventory")) {
+            if (s instanceof Player) openInventoryView((Player) s);
+            else msg(s, "Players only.");
             return true;
         }
 
